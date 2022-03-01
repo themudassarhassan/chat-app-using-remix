@@ -7,6 +7,6 @@ export const loader: LoaderFunction = ({ params }) => {
 
 export default function GroupUsers() {
   return (
-    <div>Users of that particular group</div>
+    <div className="bg-slate-900 text-white px-6 py-4">Users of that particular group</div>
   )
 }
