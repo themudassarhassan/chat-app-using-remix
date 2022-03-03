@@ -11,21 +11,14 @@ import {
 } from "remix";
 import { requireUser } from "~/auth.server";
 import { Group, User } from "@prisma/client";
-import {
-  Menu,
-  MenuList,
-  MenuButton,
-  MenuItem,
-  MenuItems,
-  MenuPopover,
-  MenuLink,
-} from "@reach/menu-button";
+import { Menu, MenuList, MenuButton, MenuItem } from "@reach/menu-button";
 
 import menuStyles from "@reach/menu-button/styles.css";
 import dialogStyles from "@reach/dialog/styles.css";
 import React from "react";
 import Dialog from "@reach/dialog";
 import { db } from "~/db.server";
+import { SocketProvider } from "../useSocket";
 
 export function links() {
   return [
@@ -46,6 +39,7 @@ export const loader: LoaderFunction = async ({ request }) => {
 };
 
 export const action: ActionFunction = async ({ request }) => {
+  const user = await requireUser(request, { redirectTo: "/login" });
   const formData = await request.formData();
 
   const name = formData.get("groupName");
@@ -58,10 +52,19 @@ export const action: ActionFunction = async ({ request }) => {
     throw json("description is not valid", { status: 400 });
   }
 
-  const group = await db.group.create({ data: { name, description }});
+  const group = await db.group.create({
+    data: {
+      name,
+      description,
+      conversations: {
+        create: [{
+          userId: user.id
+        }],
+      },
+    },
+  });
 
   return redirect(`/groups/${group.id}`);
-
 };
 
 export default function Groups() {
@@ -70,7 +73,9 @@ export default function Groups() {
   return (
     <div className="flex">
       <SideBar groups={groups} user={user} />
-      <Outlet />
+      <SocketProvider>
+        <Outlet />
+      </SocketProvider>
     </div>
   );
 }
@@ -80,7 +85,7 @@ function SideBar({ groups, user }: { groups: Group[]; user: User }) {
   const transition = useTransition();
 
   const isCreating =
-    transition.submission?.formData.get("_action") === "create" ? true : false;
+    transition.submission ? true : false;
 
   React.useEffect(() => {
     if (!isCreating) {
@@ -135,8 +140,6 @@ function SideBar({ groups, user }: { groups: Group[]; user: User }) {
                 <LoadingDots />
               ) : (
                 <button
-                  name="_action"
-                  value="create"
                   className="bg-indigo-800 text-white p-2 rounded"
                   type="submit"
                 >
@@ -203,7 +206,11 @@ function LoadingDots() {
     return () => clearInterval(interval);
   }, []);
 
-  return <span className="text-4xl text-green-800">{Array.from({ length: dots % 5 }).fill(".")}</span>;
+  return (
+    <span className="text-4xl text-green-800">
+      {Array.from({ length: dots % 5 }).fill(".")}
+    </span>
+  );
 }
 
 type LoaderData = {
